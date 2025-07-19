@@ -230,7 +230,7 @@ def create_key_management_keyboard():
         telebot.types.KeyboardButton("🔓 𝙂𝙀𝙉𝙍𝘼𝙏𝙀 𝙆𝙀𝙔"),
         telebot.types.KeyboardButton("📋 𝙆𝙀𝙔 𝙇𝙄𝙎𝙏"),
         telebot.types.KeyboardButton("🗑️ 𝘿𝙀𝙇𝙀𝙏𝙀 𝙆𝙀𝙔"),
-        telebot.types.KeyboardButton("🔙 𝙈𝘼𝙄𝙉 𝙈𝙀𝙉𝙐")
+        telebot.types.KeyboardButton("𝙈𝘼𝙄𝙉 𝙈𝙀𝙉𝙐")
     ]
     markup.add(*buttons)
     return markup
@@ -259,7 +259,7 @@ def create_vps_management_keyboard():
         telebot.types.KeyboardButton("➖ 𝙍𝙀𝙈𝙊𝙑𝙀 𝙑𝙋𝙎"),
         telebot.types.KeyboardButton("📤 𝙐𝙋𝙇𝙊𝘼𝘿 𝘽𝙄𝙉𝘼𝙍𝙔"),
         telebot.types.KeyboardButton("🗑️ 𝘿𝙀𝙇𝙀𝙏𝙀 𝘽𝙄𝙉𝘼𝙍𝙔"),
-        telebot.types.KeyboardButton("🔙 𝙈𝘼𝙄𝙉 𝙈𝙀𝙉𝙐")
+        telebot.types.KeyboardButton("𝙈𝘼𝙄𝙉 𝙈𝙀𝙉𝙐")
     ]
     markup.add(*buttons)
     return markup
@@ -275,7 +275,7 @@ def create_group_management_keyboard():
         telebot.types.KeyboardButton("❌ 𝘿𝙀𝘼𝘾𝙏𝙄𝙑𝘼𝙏𝙀 𝙋𝙐𝘽𝙇𝙄𝘾"),
         telebot.types.KeyboardButton("👥 𝘼𝘿𝘿 𝙂𝙍𝙊𝙐𝙋"),
         telebot.types.KeyboardButton("👥 𝙍𝙀𝙈𝙊𝙑𝙀 𝙂𝙍𝙊𝙐𝙋"),
-        telebot.types.KeyboardButton("🔙 𝙈𝘼𝙄𝙉 𝙈𝙀𝙉𝙐")
+        telebot.types.KeyboardButton("𝙈𝘼𝙄𝙉 𝙈𝙀𝙉𝙐")
     ]
     markup.add(*buttons)
     return markup
@@ -283,7 +283,7 @@ def create_group_management_keyboard():
 # ======================
 # 🔙 BACK TO MAIN MENU
 # ======================    
-@bot.message_handler(func=lambda msg: msg.text in ["🔙 𝙈𝘼𝙄𝙉 𝙈𝙀𝙉𝙐", "⬅️ 𝗕𝗮𝗰𝗸"])
+@bot.message_handler(func=lambda msg: msg.text in ["𝙈𝘼𝙄𝙉 𝙈𝙀𝙉𝙐", "𝗕𝗮𝗰𝗸"])
 def back_to_main_menu(message):
     """Return user to main menu with stylish message"""
     safe_send_message(
