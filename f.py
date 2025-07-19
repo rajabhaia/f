@@ -283,7 +283,7 @@ def create_group_management_keyboard():
 # ======================
 # 🔙 BACK TO MAIN MENU
 # ======================    
-@bot.message_handler(func=lambda msg: msg.text in ["𝙈𝘼𝙄𝙉 𝙈𝙀𝙉𝙐", "𝗕𝗮𝗰𝗸"])
+@bot.message_handler(func=lambda msg: msg.text in ["𝙈𝘼𝙄𝙉 𝙈𝙀𝙉𝙐"])
 def back_to_main_menu(message):
     """Return user to main menu with stylish message"""
     safe_send_message(
