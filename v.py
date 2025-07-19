@@ -106,16 +106,41 @@ SPECIAL_KEY_PRICES = {
 # Image configuration
 START_IMAGES = [
     {
-        'url': 'https://files.oaiusercontent.com/file-HwjNJUPmaJcdkPdJESzKV6?se=2025-04-22T18%3A35%3A31Z&sp=r&sv=2024-08-04&sr=b&rscc=max-age%3D299%2C%20immutable%2C%20private&rscd=attachment%3B%20filename%3D366e5d97-0495-474b-aa2f-479b8121e6b5.png&sig=QIl2qCj9A7uMnw1yxtkh2mPcEd/GPi5meibwRGAdsuA%3D',
+        'url': 'https://files.catbox.moe/8363lp.jpg',
         'caption': (
-            '🔥 *Welcome to the Ultimate DDoS Bot !*' + '\n\n'
-            '💻 *Example:* `20.235.43.9 14533 120 100`' + '\n\n'
-            '💀 *Bsdk threads ha 100 dalo time 120 dalne ke baad*' + '\n\n'
-            '⚠️ *🥰🥰🥰🥰🥰🥰🥰🥰🥰🥰🤬*⚠️' + '\n\n'
-            '⚠️ *JOIN CHANNEL  @NXR_TEAMALL *' + '\n\n'
-        )
-    },
-    
+            '```\n'
+            '╔════════════════════════════╗\n'
+            '   ⚡ DDoS BOT v3.0 ⚡\n'
+            '╚════════════════════════════╝\n'
+            '```\n\n'
+            
+            '*💻 Command Syntax:*\n'
+            '```\n'
+            '┌──────────────┬─────────────┐\n'
+            '│ Target       │ 20.235.43.9 │\n'
+            '├──────────────┼─────────────┤\n'
+            '│ Port         │ 14533       │\n'
+            '├──────────────┼─────────────┤\n'
+            '│ Duration     │ 120 sec     │\n'
+            '└──────────────┴─────────────┘\n'
+            '```\n\n'
+            
+            '*🔥 Usage Example:*\n'
+            '`20.235.43.9 14533 120`\n\n'
+            
+            '*⚠️ Warning:*\n'
+            '```\n'
+            'FOR EDUCATIONAL USE ONLY\n'
+            'ON LEGALLY AUTHORIZED TARGETS\n'
+            '```\n\n'
+            
+            '*📡 Join Updates Channel:*\n'
+            '[Click Here](https://t.me/+PtykfcI_puoyZTZl)\n\n'
+            
+            '`▄︻デ═一 • • • ︻デ═一`'
+        ),
+        'parse_mode': 'MarkdownV2'
+    }
 ]
 
 # File to store key data
